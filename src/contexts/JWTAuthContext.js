@@ -1,6 +1,6 @@
 import { createContext, useEffect, useReducer } from 'react';
 import axios from 'src/utils/taxios';
-import { verify, JWT_SECRET } from 'src/utils/jwt';
+import { decrypt } from 'src/utils/security';
 import PropTypes from 'prop-types';
 
 const initialAuthState = {
@@ -11,10 +11,10 @@ const initialAuthState = {
 
 const setSession = (accessToken) => {
   if (accessToken) {
-    localStorage.setItem('accessToken', accessToken);
+    sessionStorage.setItem('accessToken', accessToken);
     axios.defaults.headers.common.Authorization = `Bearer ${accessToken}`;
   } else {
-    localStorage.removeItem('accessToken');
+    sessionStorage.removeItem('accessToken');
     delete axios.defaults.headers.common.Authorization;
   }
 };
@@ -73,21 +73,29 @@ export const AuthProvider = (props) => {
   useEffect(() => {
     const initialize = async () => {
       try {
-        const accessToken = window.localStorage.getItem('accessToken');
+        const accessToken = sessionStorage.getItem('accessToken');
 
-        if (accessToken && verify(accessToken, JWT_SECRET)) {
+        if (accessToken) {
           setSession(accessToken);
-
-          const response = await axios.get('/merchant/auto/request');
-          const { user } = response.data;
-
-          dispatch({
-            type: 'INITIALIZE',
-            payload: {
-              isAuthenticated: true,
-              user
-            }
-          });
+          let user = decrypt(accessToken);
+          if (user) {
+            user = JSON.parse(user);
+            dispatch({
+              type: 'INITIALIZE',
+              payload: {
+                isAuthenticated: true,
+                user
+              }
+            });
+          } else {
+            dispatch({
+              type: 'INITIALIZE',
+              payload: {
+                isAuthenticated: false,
+                user: null
+              }
+            });
+          }
         } else {
           dispatch({
             type: 'INITIALIZE',
@@ -113,21 +121,43 @@ export const AuthProvider = (props) => {
   }, []);
 
   const login = async (email, password) => {
-    const response = await axios.post('/merchant/auto/login', {
-      username: email,
-      password
-    });
-    console.log(response);
+    try {
+      const response = await axios.post('/merchant/auto/login', {
+        username: email,
+        password
+      });
+      console.log(response);
 
-    const { access_token, user } = response?.data.data;
+      if (
+        response.status === 200 &&
+        response.data.type === 0 &&
+        response.data.data
+      ) {
+        const { accessToken } = response.data.data;
 
-    setSession('accessToken', access_token);
-    dispatch({
-      type: 'LOGIN',
-      payload: {
-        user
+        if (accessToken) {
+          sessionStorage.setItem('accessToken', accessToken);
+          setSession(accessToken);
+
+          let user = decrypt(accessToken);
+          if (user) {
+            user = JSON.parse(user);
+          }
+
+          dispatch({
+            type: 'LOGIN',
+            payload: {
+              user
+            }
+          });
+        }
       }
-    });
+
+      return response.data;
+    } catch (error) {
+      console.error('Login error:', error);
+      throw error;
+    }
   };
 
   const logout = async () => {
@@ -136,21 +166,31 @@ export const AuthProvider = (props) => {
   };
 
   const register = async (email, name, password) => {
-    const response = await axios.post('/account/register', {
-      email,
-      name,
-      password
-    });
-    const { accessToken, user } = response.data;
+    try {
+      const response = await axios.post('/account/register', {
+        email,
+        name,
+        password
+      });
 
-    window.localStorage.setItem('accessToken', accessToken);
+      const { accessToken, user } = response.data;
 
-    dispatch({
-      type: 'REGISTER',
-      payload: {
-        user
-      }
-    });
+      // Fixed: consistent key name
+      sessionStorage.setItem('accessToken', accessToken);
+      setSession(accessToken);
+
+      dispatch({
+        type: 'REGISTER',
+        payload: {
+          user
+        }
+      });
+
+      return response.data;
+    } catch (error) {
+      console.error('Registration error:', error);
+      throw error;
+    }
   };
 
   return (

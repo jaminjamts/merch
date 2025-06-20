@@ -18,7 +18,7 @@ function DashboardAnalytics() {
   return (
     <>
       <Helmet>
-        <title>Analytics Dashboard</title>
+        <title>adasdsad</title>
       </Helmet>
       <PageTitleWrapper>
         <PageHeader />

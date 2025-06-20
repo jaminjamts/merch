@@ -43,10 +43,12 @@ const LoginJWT = () => {
       onSubmit={async (values, { setErrors, setStatus, setSubmitting }) => {
         try {
           await login(values.email, values.password);
+
+          navigate('/extended-sidebar/dashboards/reports');
+
           if (isMountedRef.current) {
             setStatus({ success: true });
             setSubmitting(false);
-            navigate('/account');
           }
         } catch (err) {
           console.error(err);
